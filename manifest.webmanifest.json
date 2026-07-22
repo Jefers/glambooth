@@ -1,0 +1,20 @@
+{
+  "name": "GlamBooth ✨",
+  "short_name": "GlamBooth",
+  "description": "A silly, glowy photo booth with real face-tracking AR. Beards, lashes & lipstick that lock onto your face and follow you.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "id": "./",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "portrait",
+  "background_color": "#1a0b2e",
+  "theme_color": "#1a0b2e",
+  "categories": ["entertainment", "photo", "lifestyle", "fun"],
+  "lang": "en",
+  "icons": [
+    { "src": "icon.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
