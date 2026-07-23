@@ -112,7 +112,6 @@
   #help .row{display:flex;justify-content:space-between;gap:10px;padding:3px 0;border-bottom:1px dashed rgba(255,255,255,.1);align-items:baseline}
   #help .row b{font-weight:700}#help .row span{color:var(--party);font-family:ui-monospace,monospace;font-size:12px;text-align:right}
   #help .row .win{display:block;color:var(--glam);font-size:10px;opacity:.85}
-  #help .row .pins{display:block;color:#ffd24a;font-size:10px;opacity:.9}
   #help .grp{margin:8px 0 2px;font-weight:800;opacity:.8;font-size:12px;text-transform:uppercase;letter-spacing:.5px}
   #help p{opacity:.85;margin:6px 0}
 </style>
@@ -148,10 +147,6 @@
     <div id="editbar">
       <span class="nm" id="editName">sticker</span>
       <button class="lock" id="bLock" title="Lock to face / free">🔓</button>
-      <button id="bUp" title="Move up">⬆️</button>
-      <button id="bDown" title="Move down">⬇️</button>
-      <button id="bLeft" title="Move left">⬅️</button>
-      <button id="bRight" title="Move right">➡️</button>
       <button id="bSmaller" title="Smaller">➖</button>
       <button id="bBigger" title="Bigger">➕</button>
       <button id="bRotL" title="Rotate left">↺</button>
@@ -185,7 +180,7 @@
   <div id="splash">
     <div>
       <div class="logo">GlamBooth ✨</div>
-      <p>Real face‑tracking AR with <b>mesh‑warp</b> (beard & glasses bend as you turn). Hair, brows, noses & makeup locked to your features. Use the ⬆️⬇️⬅️➡️ pad to nudge anything. Tap ❔ to swap in your own art.</p>
+      <p>Real face‑tracking AR. Hair, brows, glasses, noses & makeup locked to your features with true cover‑matched placement (live == photo). Pinch to resize. Tap ❔ to swap in your own art.</p>
       <button id="startBtn">Tap to Start 📸</button>
     </div>
   </div>
@@ -195,108 +190,77 @@
 /* =====================================================================
    ===== HOW TO CUSTOMIZE GLAMBOOTH  (read me!) ========================
    ---------------------------------------------------------------------
-   IMPORTANT: this header is ONE block comment. Never put a star-slash
-   sequence inside it (it would close the comment early and break the
-   whole script). The colour search-tags below are written as bare words
-   on purpose; the real markers live in the code (e.g. search LIP).
-
-   PLACEMENT MODEL:
+   PLACEMENT MODEL (why props line up, and how hair fits):
      Every face-locked prop is placed by ONE function, computeRect(),
-     using coverProject() which EXACTLY matches the <video> cover+mirror,
-     so the live shot and the saved photo match perfectly.
-     Fit modes:
-       - scale  (glasses, nose, beard, brows, lashes, hat when WARP off):
-         centred on a feature, size = K * eye-distance, tilted by head angle.
-       - box    (hair + full-face masks): the asset FACE-WINDOW (def.win,
-         0..1) maps onto your detected skin oval; art above the window
-         becomes the crown, art below becomes the length.
-       - warp   (beard + glasses when WARP on): a 2D per-triangle affine
-         warp over a small bilinear control mesh (see section 5). Bends
-         with head pose. Crash-safe; set WARP = false to make these rigid.
+     called with the live size for the screen and with 768x1024 for the
+     photo. It uses coverProject() which EXACTLY matches the <video>'s
+     object-fit:cover + mirror. That is why the live shot and the saved
+     photo now match perfectly (no more "shrinks in the photo").
+     Two fit modes:
+       - "scale" (glasses, nose, beard, brows, lashes, hat): centred on a
+         feature, uniform size = K * eye-distance (or face width), tilted
+         by head angle.
+       - "box"   (hair + full-face masks): the asset's FACE-WINDOW (def.win,
+         normalized 0..1) is mapped onto your detected skin oval
+         (forehead-top -> chin, cheek -> cheek). Art ABOVE the window
+         becomes the crown on top of the head (the mesh has no skull
+         landmark, so the app synthesises it from your art); art BELOW
+         becomes the length. This is what makes a real hair PNG fit.
 
    1) SWAP IN BETTER (PHOTO-REAL) IMAGES
       - Make ./assets/ next to index.html. Drop a TRANSPARENT PNG in it
         (subject centred, ~512px+, keep aspect ratio).
       - FILENAME = prop name, lowercased, symbols/spaces removed.
-        e.g. Black Long Hair -> blacklonghair.png ; Pig Nose -> pignose.png
+        e.g. "Black Long Hair" -> blacklonghair.png ;
+             "Round Glasses"  -> roundglasses.png ;
+             "Pig Nose"       -> pignose.png
       - On next load the PNG auto-replaces the vector in the tray, on the
-        live face AND in photos. The in-app sheet lists EVERY filename
-        (auto-generated, never stale). Placeholders are black/blonde only.
-      - HAIR PNGs: frame the face inside that style's FACE-WINDOW (printed
-        in the sheet): hairline at TOP of window, chin at BOTTOM, cheeks at
-        SIDES; draw hair volume above the window and length below it.
-      - WARP PNGs (beard/glasses): match the control-pin UV grid printed
-        in the sheet (section 5) so the warp bends the right parts.
+        live face AND in photos. The in-app ❔ sheet lists EVERY filename
+        (auto-generated, never stale).
+      - HAIR PNGs: frame the face inside that style's FACE-WINDOW (the ❔
+        sheet prints each one, e.g. Long = y 0.12-0.56, x 0.20-0.80):
+        hairline at the TOP of the window, chin at the BOTTOM, cheeks at
+        the SIDES; draw hair volume above the window and length below it;
+        transparent elsewhere. Then it locks on like a real filter.
 
    2) ADD A NEW STICKER
-      - Push into PROPS:  P('category','svg'|'emoji','Name', art, {cx,cy,size} [, win [, warp]])
-        win  = {x0,y0,x1,y1} only for box-fit props (hair / masks).
-        warp = {u:[..],v:[..],g:[[nameOrNull,..],..]} only for warp props
-               (a control-pin grid in 0..1 UV; see section 5).
+      - Push into PROPS:  P('category','svg'|'emoji','Name', art, {cx,cy,size} [, win])
+        category = funny | glam | party | crazy
+        {cx,cy,size} = fallback position/size (fraction of width) when AR
+        can't lock it.  win = {x0,y0,x1,y1} ONLY for box-fit props (hair /
+        full-face masks) = where the face sits inside the image (0..1).
       - Add the EXACT 'Name' to the matching tracking set so it auto-locks:
         HAIR_NAMES / BROW_NAMES / LASH_NAMES / NOSE_NAMES / GLASSES_NAMES /
-        TOP_NAMES / FACE_NAMES  (Beard & Mustache matched by name).
+        TOP_NAMES / FACE_NAMES  (Beard & Mustache are matched by name).
         Props in NONE of them just float and can be dragged.
-      - New anchor geometry? add a case in fitTracked(). New warp pin name?
-        add it to namedScreen().
+      - New anchor geometry? add a case in fitTracked().
 
    3) MAKEUP COLOURS (blended, skin-conforming, GLAM tab)
       - In drawMakeup() search the tags: LIP (lipstick - redden here),
         BLUSH, SHADOW, GLOW, LASH. Procedural brows are near-black
         (BROWS). The Glam intensity slider scales them all.
 
-   4) TOGGLES (top of script):
-      - SHOW_MESH = true  -> cyan AR wireframe (off by default so it never
-                             lands in your photos).
-      - WARP = false      -> disable mesh-warp; beard & glasses sit rigid.
-
-   5) MESH-WARP (how it works + how to author a warp PNG)
-      - It is a 2D per-triangle affine warp over a bilinear control mesh
-        (NOT a GPU shader - chosen so it runs identically on iOS Safari,
-        Android and desktop with no WebGL video-texture pain). Frontal
-        pose = a clean affine placement; turning your head deforms it.
-      - A warp prop carries def.warp = {u,v,g}. u and v are the normalized
-        column/row positions of the control grid; g[j][i] is the name of
-        the face point that grid node tracks (or null = auto, filled by a
-        least-squares affine fit so the rest pose stays clean). The texture
-        is drawn as a grid of quads (each split into 2 triangles) using
-        per-triangle affine texture mapping, so it bends with the pins.
-      - To author e.g. a beard PNG: draw it so its features sit at the UVs
-        the sheet prints (mouth at the 'mouth' node, chin at 'chin', jaw
-        corners at 'jawL'/'jawR', etc.). Then it warps correctly. The
-        built-in vectors are already drawn to these contracts.
-      - Performance: a coarse grid (SUB=2). If a slow device stutters with
-        several warped props on, set WARP = false.
+   4) TOGGLES (top of <script>):  SHOW_MESH = true  -> cyan AR wireframe
+      (off by default so it never lands in your photos).
    ===================================================================== */
 
-const SHOW_MESH = false;   // true to show the AR wireframe again
-const WARP = true;         // false to disable mesh-warp (beard & glasses go rigid)
-const WARP_SUB = 2;        // subdivisions per control cell (quality vs speed)
+const SHOW_MESH = false;   // <- true to show the AR wireframe again
 
 const $=s=>document.querySelector(s);
 const clamp=(v,a,b)=>Math.min(b,Math.max(a,v));
 const fname=n=>n.toLowerCase().replace(/[^a-z0-9]+/g,'');
 const assetSrc=n=>'assets/'+fname(n)+'.png';
 
-/* ---------- vector placeholders (override via ./assets/). width/height set so natural size is correct for warp pixel-mapping ---------- */
-function beardSVG(c1,c2){return '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><defs><radialGradient id="bg" cx="50%" cy="35%" r="75%"><stop offset="0%" stop-color="'+c1+'"/><stop offset="100%" stop-color="'+c2+'"/></radialGradient><filter id="fur"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3"/></filter></defs><g filter="url(#fur)"><path d="M30 28 Q38 12 50 20 Q62 12 70 28 Q62 24 50 26 Q38 24 30 28 Z" fill="'+c2+'"/><path d="M20 42 Q30 47 40 51 Q50 55 60 51 Q70 47 80 42 Q82 86 50 98 Q18 86 20 42 Z" fill="url(#bg)"/></g><path d="M40 64 Q50 74 60 64 Q52 80 50 80 Q48 80 40 64 Z" fill="'+c2+'" opacity="0.5"/></svg>';}
-function mustacheSVG(c){return '<svg xmlns="http://www.w3.org/2000/svg" width="120" height="60" viewBox="0 0 120 60"><path d="M60 26 Q44 8 14 22 Q6 26 10 34 Q14 28 24 30 Q40 34 50 44 Q56 50 60 40 Q64 50 70 44 Q80 34 96 30 Q106 28 110 34 Q114 26 106 22 Q76 8 60 26Z" fill="'+c+'"/></svg>';}
-function glassesSVG(frame,lens,shape){let L,R;const bridge='M42 22 Q50 18 58 22',temples='<path d="M8 20 L1 18"/><path d="M92 20 L99 18"/>';if(shape==='round'){L='<circle cx="25" cy="25" r="17"/>';R='<circle cx="75" cy="25" r="17"/>';}else if(shape==='square'){L='<rect x="8" y="8" width="34" height="34" rx="6"/>';R='<rect x="58" y="8" width="34" height="34" rx="6"/>';}else if(shape==='cateye'){L='<path d="M8 16 Q25 6 42 18 Q38 42 22 42 Q8 40 8 16 Z"/>';R='<path d="M92 16 Q75 6 58 18 Q62 42 78 42 Q92 40 92 16 Z"/>';}else if(shape==='aviator'){L='<path d="M9 12 Q25 8 41 14 Q39 42 25 44 Q11 42 9 12 Z"/>';R='<path d="M59 12 Q75 8 91 14 Q89 42 75 44 Q61 42 59 12 Z"/>';}else{L='<circle cx="25" cy="25" r="17"/>';R='<circle cx="75" cy="25" r="17"/>';}return '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="50" viewBox="0 0 100 50"><g fill="'+lens+'" stroke="'+frame+'" stroke-width="3">'+L+R+'</g><g fill="none" stroke="'+frame+'" stroke-width="3" stroke-linecap="round"><path d="'+bridge+'"/>'+temples+'</g></svg>';}
-function noseSVG(type){if(type==='pig')return '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><ellipse cx="50" cy="56" rx="34" ry="26" fill="#f4a6b8"/><ellipse cx="40" cy="56" rx="7" ry="10" fill="#c96f86"/><ellipse cx="60" cy="56" rx="7" ry="10" fill="#c96f86"/><ellipse cx="42" cy="46" rx="9" ry="5" fill="#fff" opacity=".4"/></svg>';if(type==='dog')return '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><path d="M50 30 L72 60 Q50 80 28 60 Z" fill="#1c1c1c"/><ellipse cx="44" cy="46" rx="7" ry="4" fill="#fff" opacity=".3"/></svg>';if(type==='clown')return '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><defs><radialGradient id="cn" cx="38%" cy="32%" r="72%"><stop offset="0%" stop-color="#ffb0b0"/><stop offset="45%" stop-color="#ef2b2b"/><stop offset="100%" stop-color="#8f0a0a"/></radialGradient></defs><circle cx="50" cy="52" r="34" fill="url(#cn)"/><circle cx="39" cy="39" r="10" fill="#fff" opacity=".75"/></svg>';return '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><circle cx="50" cy="52" r="18" fill="#e8b894"/><circle cx="44" cy="46" r="5" fill="#fff" opacity=".5"/></svg>';}
-function browSVG(color,shape){const P=shape==='thick'?['M12,25 Q30,11 52,20 Q30,18 12,29 Z','M108,25 Q90,11 68,20 Q90,18 108,29 Z']:['M14,24 Q30,13 50,22 Q30,19 14,27 Z','M106,24 Q90,13 70,22 Q90,19 106,27 Z'];return '<svg xmlns="http://www.w3.org/2000/svg" width="120" height="44" viewBox="0 0 120 44"><path d="'+P[0]+'" fill="'+color+'"/><path d="'+P[1]+'" fill="'+color+'"/></svg>';}
+/* ---------- vector placeholders (override via ./assets/) ---------- */
+function beardSVG(c1,c2){return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 100"><defs><radialGradient id="bg" cx="50%" cy="30%" r="80%"><stop offset="0%" stop-color="'+c1+'"/><stop offset="100%" stop-color="'+c2+'"/></radialGradient><filter id="fur"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="7" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="3"/></filter></defs><g filter="url(#fur)"><path d="M8 34 Q24 12 60 20 Q96 12 112 34 Q96 26 60 30 Q24 26 8 34Z" fill="'+c2+'"/><path d="M12 36 Q8 86 60 99 Q112 86 108 36 Q88 58 60 58 Q32 58 12 36Z" fill="url(#bg)"/></g><path d="M40 60 Q60 74 80 60 Q70 82 60 82 Q50 82 40 60Z" fill="'+c2+'" opacity="0.55"/></svg>';}
+function mustacheSVG(c){return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 60"><path d="M60 26 Q44 8 14 22 Q6 26 10 34 Q14 28 24 30 Q40 34 50 44 Q56 50 60 40 Q64 50 70 44 Q80 34 96 30 Q106 28 110 34 Q114 26 106 22 Q76 8 60 26Z" fill="'+c+'"/></svg>';}
+function glassesSVG(frame,lens,shape){let L,R,bridge;if(shape==='round'){L='<circle cx="29" cy="32" r="20"/>';R='<circle cx="91" cy="32" r="20"/>';bridge='M49 30 Q60 26 71 30';}else if(shape==='square'){L='<rect x="8" y="16" width="42" height="30" rx="6"/>';R='<rect x="70" y="16" width="42" height="30" rx="6"/>';bridge='M50 26 Q60 22 70 26';}else if(shape==='cateye'){L='<path d="M8 22 Q30 12 50 24 Q44 44 24 44 Q8 42 8 22 Z"/>';R='<path d="M112 22 Q90 12 70 24 Q76 44 96 44 Q112 42 112 22 Z"/>';bridge='M50 26 Q60 22 70 26';}else if(shape==='aviator'){L='<path d="M8 22 Q28 16 48 22 Q46 44 28 46 Q10 44 8 22 Z"/>';R='<path d="M72 22 Q92 16 112 22 Q110 44 92 46 Q74 44 72 22 Z"/>';bridge='M48 24 Q60 20 72 24';}else{L='<rect x="6" y="18" width="46" height="30" rx="9"/>';R='<rect x="68" y="18" width="46" height="30" rx="9"/>';bridge='M50 24 Q60 20 70 24';}return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 60"><g fill="'+lens+'" stroke="'+frame+'" stroke-width="3">'+L+R+'</g><g fill="none" stroke="'+frame+'" stroke-width="3" stroke-linecap="round"><path d="'+bridge+'"/><path d="M8 24 L2 22"/><path d="M112 24 L118 22"/></g></svg>';}
+function noseSVG(type){if(type==='pig')return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><ellipse cx="50" cy="56" rx="34" ry="26" fill="#f4a6b8"/><ellipse cx="40" cy="56" rx="7" ry="10" fill="#c96f86"/><ellipse cx="60" cy="56" rx="7" ry="10" fill="#c96f86"/><ellipse cx="42" cy="46" rx="9" ry="5" fill="#fff" opacity=".4"/></svg>';if(type==='dog')return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><path d="M50 30 L72 60 Q50 80 28 60 Z" fill="#1c1c1c"/><ellipse cx="44" cy="46" rx="7" ry="4" fill="#fff" opacity=".3"/></svg>';if(type==='clown')return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><radialGradient id="cn" cx="38%" cy="32%" r="72%"><stop offset="0%" stop-color="#ffb0b0"/><stop offset="45%" stop-color="#ef2b2b"/><stop offset="100%" stop-color="#8f0a0a"/></radialGradient></defs><circle cx="50" cy="52" r="34" fill="url(#cn)"/><circle cx="39" cy="39" r="10" fill="#fff" opacity=".75"/></svg>';return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="52" r="18" fill="#e8b894"/><circle cx="44" cy="46" r="5" fill="#fff" opacity=".5"/></svg>';}
+function browSVG(color,shape){const P=shape==='thick'?['M12,25 Q30,11 52,20 Q30,18 12,29 Z','M108,25 Q90,11 68,20 Q90,18 108,29 Z']:['M14,24 Q30,13 50,22 Q30,19 14,27 Z','M106,24 Q90,13 70,22 Q90,19 106,27 Z'];return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 44"><path d="'+P[0]+'" fill="'+color+'"/><path d="'+P[1]+'" fill="'+color+'"/></svg>';}
 function eyeLashes(ox,len,n,wid){let s='<path d="M'+(ox-20)+' 40 Q'+ox+' 27 '+(ox+20)+' 40 Q'+ox+' 33 '+(ox-20)+' 40 Z" fill="#140a06"/>';for(let i=0;i<n;i++){const t=i/(n-1);const x=ox-18+36*t;const yb=(1-t)*(1-t)*40+2*(1-t)*t*27+t*t*40;const ang=(-90+(t-0.5)*60)*Math.PI/180;const L=len*(0.6+0.7*Math.sin(t*Math.PI));const x2=x+Math.cos(ang)*L,y2=yb+Math.sin(ang)*L;const cxm=(x+x2)/2+(t-0.5)*5,cym=(yb+y2)/2;const w=wid*(1-0.5*Math.abs(t-0.5));s+='<path d="M'+x.toFixed(1)+' '+yb.toFixed(1)+' Q'+cxm.toFixed(1)+' '+cym.toFixed(1)+' '+x2.toFixed(1)+' '+y2.toFixed(1)+'" stroke="#140a06" stroke-width="'+w.toFixed(2)+'" fill="none" stroke-linecap="round"/>';}return s;}
-function lashesSVG(style){const len=style==='dramatic'?17:style==='wispy'?14:10;const n=style==='wispy'?7:9;const wid=style==='dramatic'?2.4:1.5;return '<svg xmlns="http://www.w3.org/2000/svg" width="120" height="60" viewBox="0 0 120 60">'+eyeLashes(30,len,n,wid)+eyeLashes(90,len,n,wid)+'</svg>';}
-/* hair: a HELMET (dome on top + sideburns that stop at the ear, NOT a jaw-wrap) plus optional side locks for long/bob. */
-function hairSVG(color,hi,style,win){const fx0=win.x0*100,fx1=win.x1*100,fy0=win.y0*100,fy1=win.y1*100;const L=Math.max(2,fx0-10),R=Math.min(98,fx1+10);const sb=fy1+10;
-  const crown='M '+L+' '+fy0+' Q 50 '+(fy0-7).toFixed(1)+' '+R+' '+fy0+' Q '+R+' 2 50 2 Q '+L+' 2 '+L+' '+fy0+' Z';
-  const sideL='M '+L+' '+fy0+' L '+(fx0-1).toFixed(1)+' '+fy0+' L '+(fx0-1).toFixed(1)+' '+sb.toFixed(1)+' Q '+(fx0-7).toFixed(1)+' '+(sb+2).toFixed(1)+' '+L+' '+(sb-4).toFixed(1)+' Z';
-  const sideR='M '+R+' '+fy0+' L '+(fx1+1).toFixed(1)+' '+fy0+' L '+(fx1+1).toFixed(1)+' '+sb.toFixed(1)+' Q '+(fx1+7).toFixed(1)+' '+(sb+2).toFixed(1)+' '+R+' '+(sb-4).toFixed(1)+' Z';
-  let locks='';
-  if(style==='long'){locks='<path d="M '+(fx0-9).toFixed(1)+' '+(fy1-2).toFixed(1)+' Q '+(fx0-12).toFixed(1)+' 80 '+(fx0-6).toFixed(1)+' 100 L '+(fx0+2).toFixed(1)+' 100 Q '+(fx0-2).toFixed(1)+' 80 '+(fx0-1).toFixed(1)+' '+(fy1-2).toFixed(1)+' Z" fill="'+color+'"/><path d="M '+(fx1+9).toFixed(1)+' '+(fy1-2).toFixed(1)+' Q '+(fx1+12).toFixed(1)+' 80 '+(fx1+6).toFixed(1)+' 100 L '+(fx1-2).toFixed(1)+' 100 Q '+(fx1+2).toFixed(1)+' 80 '+(fx1+1).toFixed(1)+' '+(fy1-2).toFixed(1)+' Z" fill="'+color+'"/>';}
-  else if(style==='bob'){locks='<path d="M '+(fx0-9).toFixed(1)+' '+(fy1-2).toFixed(1)+' Q '+(fx0-11).toFixed(1)+' '+(fy1+12).toFixed(1)+' '+(fx0-3).toFixed(1)+' '+(fy1+16).toFixed(1)+' L '+(fx0+3).toFixed(1)+' '+(fy1+10).toFixed(1)+' Q '+(fx0-1).toFixed(1)+' '+(fy1+4).toFixed(1)+' '+(fx0-1).toFixed(1)+' '+(fy1-2).toFixed(1)+' Z" fill="'+color+'"/><path d="M '+(fx1+9).toFixed(1)+' '+(fy1-2).toFixed(1)+' Q '+(fx1+11).toFixed(1)+' '+(fy1+12).toFixed(1)+' '+(fx1+3).toFixed(1)+' '+(fy1+16).toFixed(1)+' L '+(fx1-3).toFixed(1)+' '+(fy1+10).toFixed(1)+' Q '+(fx1+1).toFixed(1)+' '+(fy1+4).toFixed(1)+' '+(fx1+1).toFixed(1)+' '+(fy1-2).toFixed(1)+' Z" fill="'+color+'"/>';}
-  let curls='';if(style==='curly'){[[L+6,10],[R-6,10],[50,4],[L+2,28],[R-2,28],[L+8,46],[R-8,46]].forEach(p=>{curls+='<circle cx="'+p[0]+'" cy="'+p[1]+'" r="8" fill="'+color+'"/>';});}
-  const hl='<g stroke="'+hi+'" stroke-width="1.4" opacity=".22" fill="none"><path d="M 38 '+(fy0-3).toFixed(1)+' Q 36 '+((fy0+sb)/2).toFixed(1)+' 38 '+(sb-6).toFixed(1)+'"/><path d="M 62 '+(fy0-3).toFixed(1)+' Q 64 '+((fy0+sb)/2).toFixed(1)+' 62 '+(sb-6).toFixed(1)+'"/></g>';
-  return '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><path d="'+crown+'" fill="'+color+'"/><path d="'+sideL+'" fill="'+color+'"/><path d="'+sideR+'" fill="'+color+'"/>'+locks+curls+hl+'</svg>';}
+function lashesSVG(style){const len=style==='dramatic'?17:style==='wispy'?14:10;const n=style==='wispy'?7:9;const wid=style==='dramatic'?2.4:1.5;return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 60">'+eyeLashes(30,len,n,wid)+eyeLashes(90,len,n,wid)+'</svg>';}
+/* hair: a wig frame = dome minus a face-window hole. win = where the face sits (0..1). */
+function hairSVG(color,hi,style,win){const x0=win.x0*100,x1=win.x1*100,y0=win.y0*100,y1=win.y1*100;const pad=style==='curly'?16:style==='bob'?12:14;const L=Math.max(0,x0-pad),R=Math.min(100,x1+pad);const bottom=style==='long'?100:style==='bob'?Math.min(100,y1+10):Math.min(100,y1+34);const rr=(R-L)/2;const outer='M '+L+' '+bottom+' L '+L+' '+rr+' Q '+L+' 0 '+(L+rr)+' 0 Q '+R+' 0 '+R+' '+rr+' L '+R+' '+bottom+' Z';const cx=(x0+x1)/2,cy=(y0+y1)/2,rx=(x1-x0)/2,ry=(y1-y0)/2;const hole='M '+(cx-rx)+' '+cy+' A '+rx+' '+ry+' 0 1 0 '+(cx+rx)+' '+cy+' A '+rx+' '+ry+' 0 1 0 '+(cx-rx)+' '+cy+' Z';let curls='';if(style==='curly'){[[L+4,30],[R-4,30],[L+2,55],[R-2,55],[L+6,82],[R-6,82],[cx,3]].forEach(p=>{curls+='<circle cx="'+p[0]+'" cy="'+p[1]+'" r="9" fill="'+color+'"/>';});}const hl='<g stroke="'+hi+'" stroke-width="1.4" opacity=".22" fill="none"><path d="M '+(cx-12)+' '+(y0-4)+' Q '+(cx-14)+' '+((y0+y1)/2)+' '+(cx-12)+' '+(y1-4)+'"/><path d="M '+(cx+12)+' '+(y0-4)+' Q '+(cx+14)+' '+((y0+y1)/2)+' '+(cx+12)+' '+(y1-4)+'"/></g>';return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><path d="'+outer+' '+hole+'" fill="'+color+'" fill-rule="evenodd"/>'+curls+hl+'</svg>';}
 const dataURL=s=>'data:image/svg+xml,'+encodeURIComponent(s);
 
 const BLK='#15110d',BLK2='#0a0806',BLKHI='#3a322a';
@@ -305,28 +269,18 @@ const WIN_LONG ={x0:.20,y0:.12,x1:.80,y1:.56};
 const WIN_BOB  ={x0:.20,y0:.12,x1:.80,y1:.78};
 const WIN_CURLY={x0:.17,y0:.16,x1:.83,y1:.60};
 
-/* ---------- warp control-pin grids (UV 0..1; null = auto via affine fit) ---------- */
-const WARP_GLASS={u:[0,.25,.5,.75,1],v:[0,.5,1],g:[
-  [null,'browL','bridge','browR',null],
-  ['templeL','eyeL','eyeMid','eyeR','templeR'],
-  [null,'cheekL','nose','cheekR',null]]};
-const WARP_BEARD={u:[0,.2,.5,.8,1],v:[0,.4,.75,1],g:[
-  [null,'cheekL','nose','cheekR',null],
-  [null,'jawL','mouth','jawR',null],
-  [null,null,null,null,null],
-  [null,null,'chin',null,null]]};
-
 /* ---------- catalogue ---------- */
-const P=(cat,kind,name,art,d,win,warp)=>({cat,kind,name,art,d,win,warp});
+const P=(cat,kind,name,art,d,win)=>({cat,kind,name,art,d,win});
 const PROPS=[
- P('funny','svg','Black Beard',beardSVG(BLK,BLK2),{cx:.5,cy:.74,size:.62},null,WARP_BEARD),
- P('funny','svg','Blonde Beard',beardSVG(BLD,BLD2),{cx:.5,cy:.74,size:.62},null,WARP_BEARD),
+ // FUNNY
+ P('funny','svg','Black Beard',beardSVG(BLK,BLK2),{cx:.5,cy:.74,size:.62}),
+ P('funny','svg','Blonde Beard',beardSVG(BLD,BLD2),{cx:.5,cy:.74,size:.62}),
  P('funny','svg','Black Mustache',mustacheSVG('#1a1510'),{cx:.5,cy:.64,size:.42}),
  P('funny','svg','Blonde Mustache',mustacheSVG(BLD2),{cx:.5,cy:.64,size:.42}),
- P('funny','svg','Sunglasses',glassesSVG('#050505','rgba(20,24,30,.85)','round'),{cx:.5,cy:.40,size:.52},null,WARP_GLASS),
- P('funny','svg','Round Glasses',glassesSVG('#222','rgba(180,220,255,.16)','round'),{cx:.5,cy:.40,size:.52},null,WARP_GLASS),
- P('funny','svg','Square Glasses',glassesSVG('#222','rgba(180,220,255,.16)','square'),{cx:.5,cy:.40,size:.52},null,WARP_GLASS),
- P('funny','svg','Aviators',glassesSVG('#3a3a3a','rgba(180,220,255,.16)','aviator'),{cx:.5,cy:.40,size:.54},null,WARP_GLASS),
+ P('funny','svg','Sunglasses',glassesSVG('#050505','rgba(20,24,30,.85)','round'),{cx:.5,cy:.40,size:.52}),
+ P('funny','svg','Round Glasses',glassesSVG('#222','rgba(180,220,255,.16)','round'),{cx:.5,cy:.40,size:.52}),
+ P('funny','svg','Square Glasses',glassesSVG('#222','rgba(180,220,255,.16)','square'),{cx:.5,cy:.40,size:.52}),
+ P('funny','svg','Aviators',glassesSVG('#3a3a3a','rgba(180,220,255,.16)','aviator'),{cx:.5,cy:.40,size:.54}),
  P('funny','svg','Pig Nose',noseSVG('pig'),{cx:.5,cy:.52,size:.30}),
  P('funny','svg','Dog Nose',noseSVG('dog'),{cx:.5,cy:.50,size:.26}),
  P('funny','svg','Button Nose',noseSVG('button'),{cx:.5,cy:.52,size:.20}),
@@ -334,20 +288,22 @@ const PROPS=[
  P('funny','emoji','Cool Shades','🕶️',{cx:.5,cy:.40,size:.42}),
  P('funny','emoji','Disguise','🥸',{cx:.5,cy:.5,size:.7}),
  P('funny','emoji','Clown','🤡',{cx:.5,cy:.5,size:.72}),
+ // GLAM  (makeup toggles are prepended at runtime)
  P('glam','svg','Natural Lashes',lashesSVG('natural'),{cx:.5,cy:.40,size:.62}),
  P('glam','svg','Dramatic Lashes',lashesSVG('dramatic'),{cx:.5,cy:.40,size:.66}),
  P('glam','svg','Wispy Lashes',lashesSVG('wispy'),{cx:.5,cy:.40,size:.62}),
  P('glam','svg','Black Brows',browSVG('#1a140f','natural'),{cx:.5,cy:.34,size:.55}),
  P('glam','svg','Blonde Brows',browSVG('#b98a3e','natural'),{cx:.5,cy:.34,size:.55}),
  P('glam','svg','Thick Black Brows',browSVG('#120d09','thick'),{cx:.5,cy:.34,size:.58}),
- P('glam','svg','Cat-Eye Glasses',glassesSVG('#7a1f3d','rgba(40,10,20,.45)','cateye'),{cx:.5,cy:.40,size:.54},null,WARP_GLASS),
+ P('glam','svg','Cat-Eye Glasses',glassesSVG('#7a1f3d','rgba(40,10,20,.45)','cateye'),{cx:.5,cy:.40,size:.54}),
  P('glam','svg','Black Long Hair',hairSVG(BLK,BLKHI,'long',WIN_LONG),{cx:.5,cy:.46,size:1.0},WIN_LONG),
  P('glam','svg','Blonde Long Hair',hairSVG(BLD,BLDHI,'long',WIN_LONG),{cx:.5,cy:.46,size:1.0},WIN_LONG),
  P('glam','svg','Black Bob Hair',hairSVG(BLK,BLKHI,'bob',WIN_BOB),{cx:.5,cy:.46,size:1.0},WIN_BOB),
  P('glam','svg','Blonde Bob Hair',hairSVG(BLD,BLDHI,'bob',WIN_BOB),{cx:.5,cy:.46,size:1.0},WIN_BOB),
  P('glam','svg','Black Curly Hair',hairSVG(BLK,BLKHI,'curly',WIN_CURLY),{cx:.5,cy:.46,size:1.0},WIN_CURLY),
  P('glam','svg','Blonde Curly Hair',hairSVG(BLD,BLDHI,'curly',WIN_CURLY),{cx:.5,cy:.46,size:1.0},WIN_CURLY),
- P('party','svg','Party Hat','<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100"><polygon points="50,8 8,92 24,92" fill="#ec4899"/><polygon points="50,8 24,92 40,92" fill="#f59e0b"/><polygon points="50,8 40,92 56,92" fill="#22c55e"/><polygon points="50,8 56,92 72,92" fill="#3b82f6"/><polygon points="50,8 72,92 92,92" fill="#a855f7"/><circle cx="50" cy="8" r="8" fill="#fde047"/></svg>',{cx:.5,cy:.14,size:.40}),
+ // PARTY
+ P('party','svg','Party Hat','<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><polygon points="50,8 8,92 24,92" fill="#ec4899"/><polygon points="50,8 24,92 40,92" fill="#f59e0b"/><polygon points="50,8 40,92 56,92" fill="#22c55e"/><polygon points="50,8 56,92 72,92" fill="#3b82f6"/><polygon points="50,8 72,92 92,92" fill="#a855f7"/><circle cx="50" cy="8" r="8" fill="#fde047"/></svg>',{cx:.5,cy:.14,size:.40}),
  P('party','emoji','Crown','👑',{cx:.5,cy:.14,size:.42}),
  P('party','emoji','Popper','🎉',{cx:.30,cy:.20,size:.4}),
  P('party','emoji','Confetti','🎊',{cx:.70,cy:.20,size:.4}),
@@ -357,7 +313,8 @@ const PROPS=[
  P('party','emoji','Champagne','🍾',{cx:.82,cy:.70,size:.4}),
  P('party','emoji','Sparkles','✨',{cx:.5,cy:.30,size:.5}),
  P('party','emoji','Diamond','💎',{cx:.5,cy:.30,size:.3}),
- P('crazy','svg','Pixel Shades','<svg xmlns="http://www.w3.org/2000/svg" width="120" height="60" viewBox="0 0 120 60"><rect x="6" y="20" width="44" height="26" fill="#111"/><rect x="70" y="20" width="44" height="26" fill="#111"/><rect x="50" y="24" width="20" height="8" fill="#111"/><rect x="6" y="14" width="11" height="8" fill="#ef4444"/><rect x="17" y="14" width="11" height="8" fill="#f59e0b"/><rect x="28" y="14" width="11" height="8" fill="#22c55e"/><rect x="39" y="14" width="11" height="8" fill="#3b82f6"/><rect x="70" y="14" width="11" height="8" fill="#a855f7"/><rect x="81" y="14" width="11" height="8" fill="#ec4899"/><rect x="92" y="14" width="11" height="8" fill="#22d3ee"/><rect x="103" y="14" width="11" height="8" fill="#fde047"/></svg>',{cx:.5,cy:.40,size:.52}),
+ // CRAZY
+ P('crazy','svg','Pixel Shades','<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 60"><rect x="6" y="20" width="44" height="26" fill="#111"/><rect x="70" y="20" width="44" height="26" fill="#111"/><rect x="50" y="24" width="20" height="8" fill="#111"/><rect x="6" y="14" width="11" height="8" fill="#ef4444"/><rect x="17" y="14" width="11" height="8" fill="#f59e0b"/><rect x="28" y="14" width="11" height="8" fill="#22c55e"/><rect x="39" y="14" width="11" height="8" fill="#3b82f6"/><rect x="70" y="14" width="11" height="8" fill="#a855f7"/><rect x="81" y="14" width="11" height="8" fill="#ec4899"/><rect x="92" y="14" width="11" height="8" fill="#22d3ee"/><rect x="103" y="14" width="11" height="8" fill="#fde047"/></svg>',{cx:.5,cy:.40,size:.52}),
  P('crazy','emoji','Hypno','🌀',{cx:.5,cy:.42,size:.4}),
  P('crazy','emoji','Alien','👽',{cx:.5,cy:.5,size:.72}),
  P('crazy','emoji','Robot','🤖',{cx:.5,cy:.5,size:.72}),
@@ -436,15 +393,15 @@ function propBubble(def){const b=document.createElement('div');b.className='bub'
 function makeupBubble(m){const b=document.createElement('div');b.className='bub'+(makeupOn.has(m.key)?' on':'');b.title=m.name;const sp=document.createElement('span');sp.textContent=m.icon;b.appendChild(sp);b.onclick=()=>{if(noCam){toast('Makeup needs a face 🙈');return;}if(makeupOn.has(m.key))makeupOn.delete(m.key);else makeupOn.add(m.key);b.classList.toggle('on');$('#makeupBar').classList.toggle('on',makeupOn.size>0);haptic(10);beep(800,.07,'triangle');};return b;}
 function buildTray(){const tr=$('#tray');tr.innerHTML='';if(activeCat==='glam'){MAKEUP.forEach(m=>tr.appendChild(makeupBubble(m)));const dv=document.createElement('div');dv.className='trayDiv';tr.appendChild(dv);PROPS.filter(p=>p.cat==='glam').forEach(d=>tr.appendChild(propBubble(d)));return;}PROPS.filter(p=>p.cat===activeCat).forEach(d=>tr.appendChild(propBubble(d)));}
 
-/* ---------- projection matching the <video> cover+mirror EXACTLY ---------- */
+/* ---------- projection that matches the <video> cover+mirror EXACTLY ---------- */
 function coverProject(vw,vh,W,H){const sc=Math.max(W/vw,H/vh);return lm=>({x:W/2 - vw*sc*(lm.x-0.5), y:H/2 + vh*sc*(lm.y-0.5)});}
 
 /* ---------- face metrics from a projector P(i)->{x,y} ---------- */
 function faceMetricsFromP(P){
   const avg=idx=>{let x=0,y=0;idx.forEach(i=>{const p=P(i);x+=p.x;y+=p.y;});return{x:x/idx.length,y:y/idx.length};};
   const eL=avg(LEFT_EYE),eR=avg(RIGHT_EYE);
-  const se=[eL,eR].sort((a,b)=>a.x-b.x);
-  const angle=Math.atan2(se[1].y-se[0].y,se[1].x-se[0].x)*180/Math.PI;
+  const se=[eL,eR].sort((a,b)=>a.x-b.x);                 // screen-left, screen-right
+  const angle=Math.atan2(se[1].y-se[0].y,se[1].x-se[0].x)*180/Math.PI;  // upright face => ~0 (no flip)
   const eMid={x:(eL.x+eR.x)/2,y:(eL.y+eR.y)/2};
   const nose=P(1),mouth={x:(P(13).x+P(14).x)/2,y:(P(13).y+P(14).y)/2},chin=P(152),top=P(10);
   const browMid={x:(avg(LEFT_BROW).x+avg(RIGHT_BROW).x)/2,y:(avg(LEFT_BROW).y+avg(RIGHT_BROW).y)/2};
@@ -454,7 +411,7 @@ function faceMetricsFromP(P){
   return{eL,eR,eMid,eyeDist,nose,mouth,chin,top,browMid,faceW:openRect.x1-openRect.x0,faceH:openRect.y1-openRect.y0,angle,openRect};
 }
 
-/* ---------- per-sticker rect (single source of truth for non-warp) ---------- */
+/* ---------- per-sticker rect (the single source of truth) ---------- */
 function defaultFrac(def){return{cx:def.d.cx,cy:def.d.cy,w:def.d.size,h:null,rot:0,box:false};}
 function toFrac(r,W,H){return{cx:r.cx/W,cy:r.cy/H,w:r.w/W,h:r.h!=null?r.h/H:null,rot:r.rot,box:r.box};}
 function fromFrac(f,W,H){return{cx:f.cx*W,cy:f.cy*H,w:f.w*W,h:f.h!=null?f.h*H:null,rot:f.rot,box:f.box};}
@@ -462,9 +419,21 @@ function fitTracked(st,lm,W,H){
   const vw=video.videoWidth||1,vh=video.videoHeight||1;const proj=coverProject(vw,vh,W,H);
   const F=faceMetricsFromP(i=>proj(lm[i]));st._faceH=F.faceH;
   const a=anchorFor(st.def.name);let cx,cy,w,h,rot,box;
-  if(a.t==='hair'){const win=st.def.win||WIN_LONG;const o=F.openRect;const sx=(o.x1-o.x0)/(win.x1-win.x0),sy=(o.y1-o.y0)/(win.y1-win.y0);const aw=sx,ah=sy;cx=(o.x0-win.x0*sx)+aw/2;cy=(o.y0-win.y0*sy)+ah/2;w=aw;h=ah;rot=F.angle;box=true;}
-  else if(a.t==='face'){const o=F.openRect;const m=1.2;cx=(o.x0+o.x1)/2;cy=(o.y0+o.y1)/2;w=(o.x1-o.x0)*m;h=(o.y1-o.y0)*m;rot=F.angle;box=true;}
-  else{box=false;const K=a.K;let c;if(a.t==='eyes')c=F.eMid;else if(a.t==='nose')c=F.nose;else if(a.t==='mustache')c={x:(F.nose.x+F.mouth.x)/2,y:(F.nose.y+F.mouth.y)/2};else if(a.t==='beard')c={x:(F.mouth.x+F.chin.x)/2,y:(F.mouth.y+F.chin.y)/2};else if(a.t==='top')c={x:F.top.x,y:F.top.y-F.faceH*0.12};else if(a.t==='brows')c=F.browMid;else c=F.eMid;cx=c.x;cy=c.y;w=(a.t==='beard'||a.t==='top')?K*F.faceW:K*F.eyeDist;rot=F.angle;h=null;}
+  if(a.t==='hair'){
+    const win=st.def.win||WIN_LONG;const o=F.openRect;
+    const sx=(o.x1-o.x0)/(win.x1-win.x0), sy=(o.y1-o.y0)/(win.y1-win.y0);   // px per normalized unit
+    const aw=sx, ah=sy; cx=(o.x0-win.x0*sx)+aw/2; cy=(o.y0-win.y0*sy)+ah/2; w=aw; h=ah; rot=F.angle; box=true;
+  } else if(a.t==='face'){
+    const o=F.openRect;const m=1.2;cx=(o.x0+o.x1)/2;cy=(o.y0+o.y1)/2;w=(o.x1-o.x0)*m;h=(o.y1-o.y0)*m;rot=F.angle;box=true;
+  } else {
+    box=false;const K=a.K;let c;
+    if(a.t==='eyes')c=F.eMid;else if(a.t==='nose')c=F.nose;
+    else if(a.t==='mustache')c={x:(F.nose.x+F.mouth.x)/2,y:(F.nose.y+F.mouth.y)/2};
+    else if(a.t==='beard')c={x:(F.mouth.x+F.chin.x)/2,y:(F.mouth.y+F.chin.y)/2};
+    else if(a.t==='top')c={x:F.top.x,y:F.top.y-F.faceH*0.12};
+    else if(a.t==='brows')c=F.browMid;else c=F.eMid;
+    cx=c.x;cy=c.y;w=(a.t==='beard'||a.t==='top')?K*F.faceW:K*F.eyeDist;rot=F.angle;h=null;
+  }
   w*=st.userScale;if(h!=null)h*=st.userScale;rot+=st.userRot;cx+=st.offFx*F.faceH;cy+=st.offFy*F.faceH;
   return{cx,cy,w,h,rot,box};
 }
@@ -474,61 +443,17 @@ function computeRect(st,lm,W,H){
   return fromFrac(st._frac,W,H);
 }
 
-/* ---------- paint a DOM sticker from a rect ---------- */
+/* ---------- paint a sticker element from a rect ---------- */
 function paint(st,r){st.el.style.left=r.cx+'px';st.el.style.top=r.cy+'px';st.el.style.transform='translate(-50%,-50%) rotate('+r.rot+'deg)';
   if(st.def.kind==='emoji'){st.el.firstChild.style.fontSize=r.w+'px';st.el.firstChild.style.lineHeight='1';}
-  else{const im=st.el.firstChild;im.style.width=r.w+'px';im.style.height=(r.box&&r.h)?r.h+'px':'auto';im.style.visibility='visible';}}
-
-/* =====================================================================
-   ===== MESH-WARP (2D per-triangle affine over a bilinear control mesh) =
-   ===================================================================== */
-function isWarpActive(s,lm){return WARP && !!s.def.warp && s.tracked && !!lm;}
-function det3(m){return m[0][0]*(m[1][1]*m[2][2]-m[1][2]*m[2][1])-m[0][1]*(m[1][0]*m[2][2]-m[1][2]*m[2][0])+m[0][2]*(m[1][0]*m[2][1]-m[1][1]*m[2][0]);}
-function solve3(M,b){const d=det3(M);if(Math.abs(d)<1e-9)return[0,0,0];const c=col=>{const MM=M.map(r=>r.slice());for(let i=0;i<3;i++)MM[i][col]=b[i];return det3(MM)/d;};return[c(0),c(1),c(2)];}
-function fitAffine(nodes){let Suu=0,Svv=0,Suv=0,Su=0,Sv=0,N=0,SuX=0,SvX=0,SX=0,SuY=0,SvY=0,SY=0;
-  for(const n of nodes){const u=n.u,v=n.v;Suu+=u*u;Svv+=v*v;Suv+=u*v;Su+=u;Sv+=v;N++;SuX+=u*n.X;SvX+=v*n.X;SX+=n.X;SuY+=u*n.Y;SvY+=v*n.Y;SY+=n.Y;}
-  const M=[[Suu,Suv,Su],[Suv,Svv,Sv],[Su,Sv,N]];return{ax:solve3(M,[SuX,SvX,SX]),ay:solve3(M,[SuY,SvY,SY])};}
-function evalAffine(A,u,v){return{X:A.ax[0]*u+A.ax[1]*v+A.ax[2],Y:A.ay[0]*u+A.ay[1]*v+A.ay[2]};}
-function avgP(idx,P){let x=0,y=0;idx.forEach(i=>{const p=P(i);x+=p.x;y+=p.y;});return{x:x/idx.length,y:y/idx.length};}
-function namedScreen(name,P,F){switch(name){
-  case'eyeL':return F.eL;case'eyeR':return F.eR;case'eyeMid':return F.eMid;case'nose':return F.nose;
-  case'mouth':return F.mouth;case'chin':return F.chin;case'jawL':return P(234);case'jawR':return P(454);
-  case'cheekL':return P(117);case'cheekR':return P(346);case'browL':return avgP(LEFT_BROW,P);case'browR':return avgP(RIGHT_BROW,P);
-  case'bridge':return{x:F.eMid.x,y:F.eMid.y-F.eyeDist*0.12};
-  case'templeL':return{x:P(234).x-F.eyeDist*0.15,y:F.eMid.y};case'templeR':return{x:P(454).x+F.eyeDist*0.15,y:F.eMid.y};
-  default:return F.eMid;}}
-function postTF(p,st,F){const c=F.center,sc=st.userScale,rot=st.userRot*Math.PI/180,co=Math.cos(rot),si=Math.sin(rot),ox=st.offFx*F.faceH,oy=st.offFy*F.faceH,dx=p.x-c.x,dy=p.y-c.y;return{x:c.x+(dx*co-dy*si)*sc+ox,y:c.y+(dx*si+dy*co)*sc+oy};}
-function resolveNodes(st,lm,W,H){
-  const vw=video.videoWidth||1,vh=video.videoHeight||1;const proj=coverProject(vw,vh,W,H);const P=i=>proj(lm[i]);const F=faceMetricsFromP(P);
-  const cfg=st.def.warp,cols=cfg.u.length,rows=cfg.v.length;
-  const named=[];for(let j=0;j<rows;j++)for(let i=0;i<cols;i++){const nm=cfg.g[j][i];if(nm){const p=namedScreen(nm,P,F);named.push({u:cfg.u[i],v:cfg.v[j],X:p.x,Y:p.y});}}
-  const A=fitAffine(named);const S=[];
-  for(let j=0;j<rows;j++){S[j]=[];for(let i=0;i<cols;i++){const nm=cfg.g[j][i];let p=nm?namedScreen(nm,P,F):evalAffine(A,cfg.u[i],cfg.v[j]);S[j][i]=postTF(p,st,F);}}
-  let minx=1e9,miny=1e9,maxx=-1e9,maxy=-1e9;for(let j=0;j<rows;j++)for(let i=0;i<cols;i++){const p=S[j][i];minx=Math.min(minx,p.x);maxx=Math.max(maxx,p.x);miny=Math.min(miny,p.y);maxy=Math.max(maxy,p.y);}
-  return{S,F,img:artImage(st.def),cfg,bbox:{x:minx,y:miny,w:Math.max(2,maxx-minx),h:Math.max(2,maxy-miny)}};
-}
-function triAffine(s0,s1,s2,d0,d1,d2){const u1=s1[0]-s0[0],u2=s2[0]-s0[0],v1=s1[1]-s0[1],v2=s2[1]-s0[1];const det=u1*v2-u2*v1;if(Math.abs(det)<1e-6)return null;const id=1/det;const i00=id*v2,i01=id*(-u2),i10=id*(-v1),i11=id*u1;const q0x=d1[0]-d0[0],q1x=d2[0]-d0[0],q0y=d1[1]-d0[1],q1y=d2[1]-d0[1];const a=q0x*i00+q1x*i10,c=q0x*i01+q1x*i11,b=q0y*i00+q1y*i10,d=q0y*i01+q1y*i11;return[a,b,c,d,-(a*s0[0]+c*s0[1])+d0[0],-(b*s0[0]+d*s0[1])+d0[1]];}
-function drawTri(ctx,img,s0,s1,s2,d0,d1,d2){const m=triAffine([s0.x,s0.y],[s1.x,s1.y],[s2.x,s2.y],[d0.x,d0.y],[d1.x,d1.y],[d2.x,d2.y]);if(!m)return;ctx.save();ctx.beginPath();ctx.moveTo(d0.x,d0.y);ctx.lineTo(d1.x,d1.y);ctx.lineTo(d2.x,d2.y);ctx.closePath();ctx.clip();ctx.transform(m[0],m[1],m[2],m[3],m[4],m[5]);ctx.drawImage(img,0,0);ctx.restore();}
-function drawWarp(ctx,st,nd){const img=nd.img;if(!img||!img.complete||!img.naturalWidth)return;const iw=img.naturalWidth,ih=img.naturalHeight,S=nd.S,cfg=nd.cfg,cols=cfg.u.length,rows=cfg.v.length,SUB=WARP_SUB;const lerp=(a,b,t)=>a+(b-a)*t;
-  ctx.save();ctx.setTransform(1,0,0,1,0,0);ctx.imageSmoothingEnabled=true;
-  for(let j=0;j<rows-1;j++)for(let i=0;i<cols-1;i++){
-    const P=[],T=[];for(let sj=0;sj<=SUB;sj++){P[sj]=[];T[sj]=[];for(let si=0;si<=SUB;si++){const fu=si/SUB,fv=sj/SUB;const u=lerp(cfg.u[i],cfg.u[i+1],fu),v=lerp(cfg.v[j],cfg.v[j+1],fv);
-      const s00=S[j][i],s10=S[j][i+1],s01=S[j+1][i],s11=S[j+1][i+1];const tx=lerp(s00.x,s10.x,fu),ty=lerp(s00.y,s10.y,fv),bx=lerp(s01.x,s11.x,fu),by=lerp(s01.y,s11.y,fv);
-      P[sj][si]={x:lerp(tx,bx,fv),y:lerp(ty,by,fv)};T[sj][si]={x:u*iw,y:v*ih};}}
-    for(let sj=0;sj<SUB;sj++)for(let si=0;si<SUB;si++){
-      drawTri(ctx,img,T[sj][si],T[sj][si+1],T[sj+1][si],P[sj][si],P[sj][si+1],P[sj+1][si]);
-      drawTri(ctx,img,T[sj][si+1],T[sj+1][si+1],T[sj+1][si],P[sj][si+1],P[sj+1][si+1],P[sj+1][si]);
-    }
-  }
-  ctx.restore();
-}
+  else{const im=st.el.firstChild;im.style.width=r.w+'px';im.style.height=(r.box&&r.h)?r.h+'px':'auto';}}
 
 /* ---------- add / select / remove ---------- */
 function addSticker(def,ov){const el=document.createElement('div');el.className='sticker';
   if(def.kind==='emoji'){const sp=document.createElement('span');sp.textContent=def.art;el.appendChild(sp);}
   else{const im=document.createElement('img');im.src=artSrc(def);im.draggable=false;el.appendChild(im);}
   stage.appendChild(el);
-  const s={def,el,tracked:false,userScale:1,userRot:0,offFx:0,offFy:0,_faceH:1,_warpBBox:null,_lastRect:null,
+  const s={def,el,tracked:false,userScale:1,userRot:0,offFx:0,offFy:0,_faceH:1,
     _frac:ov?{cx:ov.cx,cy:ov.cy,w:ov.size,h:null,rot:ov.rot||0,box:false}:defaultFrac(def)};
   const want=arOn&&arReady&&anchorFor(def.name).t!=='none'&&!ov;
   if(want){s.tracked=true;el.classList.add('locked');}
@@ -540,33 +465,30 @@ function select(s){if(selected)selected.el.classList.remove('sel');selected=s;
   else $('#editbar').classList.remove('on');}
 function removeSticker(s){s.el.remove();stickers=stickers.filter(x=>x!==s);if(selected===s)select(null);}
 function refresh(s){paint(s,computeRect(s,lastLM,viewW,viewH));}
-const zOf=s=>parseInt(s.el.style.zIndex)||0;
 
-/* ---------- gestures (work for tracked + free + warp) ---------- */
+/* ---------- gestures (work for tracked + free) ---------- */
 function attachGesture(s){const pts=new Map();let mode=null,lastD=0,lastA=0,lastX=0,lastY=0;
   s.el.addEventListener('pointerdown',e=>{e.stopPropagation();select(s);pts.set(e.pointerId,{x:e.clientX,y:e.clientY});try{s.el.setPointerCapture(e.pointerId);}catch(_){}lastX=e.clientX;lastY=e.clientY;
     if(pts.size===1){mode='drag';s.el.style.cursor='grabbing';}
     else if(pts.size>=2){mode='gesture';const[a,b]=[...pts.values()];lastD=Math.hypot(a.x-b.x,a.y-b.y);lastA=Math.atan2(b.y-a.y,b.x-a.x);}});
   s.el.addEventListener('pointermove',e=>{if(!pts.has(e.pointerId))return;pts.set(e.pointerId,{x:e.clientX,y:e.clientY});
     if(mode==='drag'&&pts.size===1){const dx=e.clientX-lastX,dy=e.clientY-lastY;lastX=e.clientX;lastY=e.clientY;
-      if(s.tracked){const fh=s._faceH||1;s.offFx+=dx/fh;s.offFy+=dy/fh;}else{s._frac.cx+=dx/viewW;s._frac.cy+=dy/viewH;}if(!(s.def.warp&&s.tracked))refresh(s);}
-    else if(mode==='gesture'&&pts.size>=2){const[a,b]=[...pts.values()];const d=Math.hypot(a.x-b.x,a.y-b.y),ang=Math.atan2(b.y-a.y,b.x-a.x);const ratio=lastD>0?d/lastD:1;const deg=(ang-lastA)*180/Math.PI;lastD=d;lastA=ang;
-      if(s.tracked){s.userScale=clamp(s.userScale*ratio,.2,6);s.userRot+=deg;}else{s._frac.w*=ratio;if(s._frac.box&&s._frac.h)s._frac.h*=ratio;s._frac.rot+=deg;}if(!(s.def.warp&&s.tracked))refresh(s);}});
+      if(s.tracked){const fh=s._faceH||1;s.offFx+=dx/fh;s.offFy+=dy/fh;}
+      else{s._frac.cx+=dx/viewW;s._frac.cy+=dy/viewH;}refresh(s);}
+    else if(mode==='gesture'&&pts.size>=2){const[a,b]=[...pts.values()];const d=Math.hypot(a.x-b.x,a.y-b.y),ang=Math.atan2(b.y-a.y,b.x-a.x);
+      const ratio=lastD>0?d/lastD:1;const deg=(ang-lastA)*180/Math.PI;lastD=d;lastA=ang;
+      if(s.tracked){s.userScale=clamp(s.userScale*ratio,.2,6);s.userRot+=deg;}
+      else{s._frac.w*=ratio;if(s._frac.box&&s._frac.h)s._frac.h*=ratio;s._frac.rot+=deg;}refresh(s);}});
   const up=e=>{pts.delete(e.pointerId);if(pts.size<2){mode=pts.size===1?'drag':null;lastD=0;}if(pts.size===0)s.el.style.cursor=s.tracked?'default':'grab';};
   s.el.addEventListener('pointerup',up);s.el.addEventListener('pointercancel',up);s.el.addEventListener('lostpointercapture',up);}
 stage.addEventListener('pointerdown',()=>select(null));
 
-function scaleSel(f){if(!selected)return;if(selected.tracked)selected.userScale=clamp(selected.userScale*f,.2,6);else{selected._frac.w*=f;if(selected._frac.box&&selected._frac.h)selected._frac.h*=f;}if(!(selected.def.warp&&selected.tracked))refresh(selected);haptic(8);}
-function rotSel(d){if(!selected)return;if(selected.tracked)selected.userRot+=d;else selected._frac.rot+=d;if(!(selected.def.warp&&selected.tracked))refresh(selected);haptic(8);}
-function nudge(dx,dy){if(!selected)return;const s=selected;const step=s.tracked?0.06:0.04;if(s.tracked){s.offFx+=dx*step;s.offFy+=dy*step;}else{s._frac.cx+=dx*step;s._frac.cy+=dy*step;}if(!(s.def.warp&&s.tracked))refresh(s);haptic(6);}
+function scaleSel(f){if(!selected)return;if(selected.tracked)selected.userScale=clamp(selected.userScale*f,.2,6);else{selected._frac.w*=f;if(selected._frac.box&&selected._frac.h)selected._frac.h*=f;}refresh(selected);haptic(8);}
+function rotSel(d){if(!selected)return;if(selected.tracked)selected.userRot+=d;else selected._frac.rot+=d;refresh(selected);haptic(8);}
 $('#bBigger').onclick=()=>scaleSel(1.25);
 $('#bSmaller').onclick=()=>scaleSel(.8);
 $('#bRotL').onclick=()=>rotSel(-15);
 $('#bRotR').onclick=()=>rotSel(15);
-$('#bUp').onclick=()=>nudge(0,-1);
-$('#bDown').onclick=()=>nudge(0,1);
-$('#bLeft').onclick=()=>nudge(-1,0);
-$('#bRight').onclick=()=>nudge(1,0);
 $('#bDup').onclick=()=>{if(!selected)return;const s=selected;const ns=addSticker(s.def,s.tracked?undefined:{cx:clamp(s._frac.cx+.06,.05,.95),cy:clamp(s._frac.cy+.06,.05,.95),size:s._frac.w});if(s.tracked&&ns.tracked){ns.userScale=s.userScale;ns.userRot=s.userRot+8;ns.offFx=s.offFx+0.05;}haptic(12);};
 $('#bFront').onclick=()=>{if(selected){selected.el.style.zIndex=++zTop;haptic(8);}};
 $('#bDel').onclick=()=>{if(selected){removeSticker(selected);haptic(15);beep(300,.1,'sawtooth');}};
@@ -583,7 +505,7 @@ function drawMakeup(ctx,lm,proj,I){
   const P=i=>proj(lm[i]);const F=faceMetricsFromP(P);
   /*BROWS*/ if(makeupOn.has('brows')){ctx.save();ctx.globalAlpha=.85*Math.max(.4,I);ctx.fillStyle='#1c140d';ctx.shadowColor='rgba(0,0,0,.4)';ctx.shadowBlur=4;poly(ctx,LEFT_BROW,P);ctx.fill();poly(ctx,RIGHT_BROW,P);ctx.fill();ctx.restore();}
   /*SHADOW*/ if(makeupOn.has('shadow')){ctx.save();ctx.globalCompositeOperation='soft-light';
-    [[F.eL,F.browMid],[F.eR,F.browMid]].forEach(([eye,brow])=>{const c={x:(eye.x+brow.x)/2,y:(eye.y+brow.y)/2},rx=F.eyeDist*.95,ry=F.eyeDist*.7;const g=ctx.createRadialGradient(c.x,c.y,1,c.x,c.y,rx);g.addColorStop(0,'rgba(150,80,110,'+(.9*I)+')');g.addColorStop(1,'rgba(150,80,110,0)');ctx.fillStyle=g;ctx.save();ctx.translate(c.x,c.y);ctx.rotate(F.angle*Math.PI/180);ctx.scale(1,ry/rx);ctx.beginPath();ctx.arc(0,0,rx,0,7);ctx.fill();ctx.restore();});ctx.restore();}
+    [[F.eL,faceMetricsFromP(P).browMid],[F.eR,faceMetricsFromP(P).browMid]].forEach(([eye,brow])=>{const c={x:(eye.x+brow.x)/2,y:(eye.y+brow.y)/2},rx=F.eyeDist*.95,ry=F.eyeDist*.7;const g=ctx.createRadialGradient(c.x,c.y,1,c.x,c.y,rx);g.addColorStop(0,'rgba(150,80,110,'+(.9*I)+')');g.addColorStop(1,'rgba(150,80,110,0)');ctx.fillStyle=g;ctx.save();ctx.translate(c.x,c.y);ctx.rotate(F.angle*Math.PI/180);ctx.scale(1,ry/rx);ctx.beginPath();ctx.arc(0,0,rx,0,7);ctx.fill();ctx.restore();});ctx.restore();}
   /*BLUSH*/ if(makeupOn.has('blush')){ctx.save();ctx.globalCompositeOperation='multiply';[117,346].forEach(i=>{const c=P(i),r=F.eyeDist*1.25;const g=ctx.createRadialGradient(c.x,c.y,1,c.x,c.y,r);g.addColorStop(0,'rgba(255,120,140,'+(.55*I)+')');g.addColorStop(.6,'rgba(255,120,140,'+(.25*I)+')');g.addColorStop(1,'rgba(255,120,140,0)');ctx.fillStyle=g;ctx.beginPath();ctx.arc(c.x,c.y,r,0,7);ctx.fill();});ctx.restore();}
   /*LIP*/ if(makeupOn.has('lipstick')){ctx.save();let minx=1e9,miny=1e9,maxx=-1e9,maxy=-1e9;LIPS_OUT.forEach(i=>{const p=P(i);minx=Math.min(minx,p.x);maxx=Math.max(maxx,p.x);miny=Math.min(miny,p.y);maxy=Math.max(maxy,p.y);});
     ctx.save();ctx.shadowColor='rgba(120,0,10,'+(.5*I)+')';ctx.shadowBlur=8;poly(ctx,LIPS_OUT,P);ctx.fillStyle='rgba(120,0,10,'+(.25*I)+')';ctx.fill();ctx.restore();
@@ -598,13 +520,9 @@ function drawMakeup(ctx,lm,proj,I){
 function drawLoops(ctx,P){LOOPS.forEach(loop=>{ctx.beginPath();loop.forEach((idx,j)=>{const p=P(idx);j?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y);});if(CLOSED.has(loop))ctx.closePath();ctx.stroke();});}
 function drawMeshGlow(ctx,lm,proj){const P=i=>proj(lm[i]);ctx.save();ctx.fillStyle='rgba(120,255,255,.5)';ctx.beginPath();for(let i=0;i<lm.length;i++){const p=P(i);ctx.rect(p.x-1,p.y-1,2,2);}ctx.fill();ctx.lineWidth=1.2;ctx.strokeStyle='rgba(120,230,255,.7)';ctx.shadowColor='rgba(54,214,255,.9)';ctx.shadowBlur=8;drawLoops(ctx,P);ctx.restore();}
 
-/* ---------- scene render (live + capture share this; warp props drawn here on the canvas) ---------- */
+/* ---------- scene render (live + capture share this) ---------- */
 function drawVideoCover(ctx,W,H){const vw=video.videoWidth,vh=video.videoHeight;if(!vw||!vh)return false;const sc=Math.max(W/vw,H/vh);const dw=vw*sc,dh=vh*sc;const ox=(W-dw)/2,oy=(H-dh)/2;ctx.save();ctx.translate(W,0);ctx.scale(-1,1);ctx.drawImage(video,ox,oy,dw,dh);ctx.restore();return true;}
-function renderScene(ctx,W,H,lm){ctx.clearRect(0,0,W,H);let ok=false;if(!noCam)ok=drawVideoCover(ctx,W,H);if(!ok){const g=ctx.createLinearGradient(0,0,W,H);g.addColorStop(0,'#ff2d78');g.addColorStop(.5,'#a23bff');g.addColorStop(1,'#23d5ff');ctx.fillStyle=g;ctx.fillRect(0,0,W,H);}
-  if(lm){const vw=video.videoWidth||1,vh=video.videoHeight||1;const proj=coverProject(vw,vh,W,H);drawMakeup(ctx,lm,proj,makeupIntensity);if(SHOW_MESH)drawMeshGlow(ctx,lm,proj);
-    const ws=stickers.filter(s=>isWarpActive(s,lm)).sort((a,b)=>zOf(a)-zOf(b));
-    for(const s of ws){try{const nd=resolveNodes(s,lm,W,H);s._warpBBox=nd.bbox;drawWarp(ctx,s,nd);}catch(e){console.warn('[GlamBooth] warp',e);}}}
-}
+function renderScene(ctx,W,H,lm){ctx.clearRect(0,0,W,H);let ok=false;if(!noCam)ok=drawVideoCover(ctx,W,H);if(!ok){const g=ctx.createLinearGradient(0,0,W,H);g.addColorStop(0,'#ff2d78');g.addColorStop(.5,'#a23bff');g.addColorStop(1,'#23d5ff');ctx.fillStyle=g;ctx.fillRect(0,0,W,H);}if(lm){const vw=video.videoWidth||1,vh=video.videoHeight||1;const proj=coverProject(vw,vh,W,H);drawMakeup(ctx,lm,proj,makeupIntensity);if(SHOW_MESH)drawMeshGlow(ctx,lm,proj);}}
 
 /* ---------- AR engine ---------- */
 function cameraVisible(){return !$('#gallery').classList.contains('on')&&!$('#viewer').classList.contains('on')&&$('#splash').style.display==='none';}
@@ -618,29 +536,22 @@ $('#arBtn').onclick=()=>{if(noCam)return;arOn=!arOn;if(arOn)ensureAR();else last
 /* ---------- sizing + main loop ---------- */
 function sizeView(){const w=stage.clientWidth,h=stage.clientHeight;if(w&&h&&(view.width!==w||view.height!==h)){view.width=w;view.height=h;viewW=w;viewH=h;}}
 if(window.ResizeObserver)new ResizeObserver(sizeView).observe(stage);
-function setElBox(s,b,vis){s.el.style.left=b.x+'px';s.el.style.top=b.y+'px';s.el.style.width=b.w+'px';s.el.style.height=b.h+'px';s.el.style.transform='none';const im=s.el.firstChild;if(im&&im.tagName==='IMG'){im.style.width='100%';im.style.height='100%';im.style.visibility=vis;}}
 function loop(){requestAnimationFrame(loop);if(!cameraVisible())return;sizeView();
   let lm=null;
   if(arOn&&arReady&&!noCam&&video.readyState>=2&&video.videoWidth){try{const r=faceLandmarker.detectForVideo(video,performance.now());lm=(r&&r.faceLandmarks&&r.faceLandmarks[0])||null;}catch(e){detectError(e);lm=null;}}
   lastLM=lm;
   renderScene(vctx,viewW,viewH,lm);
-  stickers.forEach(s=>{
-    if(isWarpActive(s,lm)){const b=s._warpBBox;if(b){setElBox(s,b,'hidden');s._lastRect={x:b.x,y:b.y,w:b.w,h:b.h};}}
-    else if(s.def.warp&&s.tracked&&s._lastRect){setElBox(s,s._lastRect,'visible');}
-    else{paint(s,computeRect(s,lm,viewW,viewH));}
-  });}
+  stickers.forEach(s=>paint(s,computeRect(s,lm,viewW,viewH)));}
 
 /* ---------- capture / fx / gallery ---------- */
 function captureFrame(){const W=768,H=1024,c=document.createElement('canvas');c.width=W;c.height=H;const ctx=c.getContext('2d');renderScene(ctx,W,H,lastLM);
-  [...stickers].sort((a,b)=>zOf(a)-zOf(b)).forEach(s=>{if(isWarpActive(s,lastLM))return; // drawn on canvas by renderScene
-    let r;if(s.def.warp&&s.tracked&&s._lastRect){const L=s._lastRect;r={cx:L.x+L.w/2,cy:L.y+L.h/2,w:L.w,h:L.h,rot:0,box:true};}else r=computeRect(s,lastLM,W,H);
-    ctx.save();ctx.translate(r.cx,r.cy);ctx.rotate(r.rot*Math.PI/180);
+  [...stickers].sort((a,b)=>(a.el.style.zIndex|0)-(b.el.style.zIndex|0)).forEach(s=>{const r=computeRect(s,lastLM,W,H);ctx.save();ctx.translate(r.cx,r.cy);ctx.rotate(r.rot*Math.PI/180);
     if(s.def.kind==='emoji'){ctx.font=r.w+'px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(s.def.art,0,0);}
     else{const im=artImage(s.def);if(r.box&&r.h){ctx.drawImage(im,-r.w/2,-r.h/2,r.w,r.h);}else{const ar=(im.naturalHeight/im.naturalWidth)||1;ctx.drawImage(im,-r.w/2,-(r.w*ar)/2,r.w,r.w*ar);}}
     ctx.restore();});return c;}
 function doFlash(){flash.classList.remove('go');void flash.offsetWidth;flash.classList.add('go');}
 const fx=$('#fx'),fxc=fx.getContext('2d');let parts=[];
-function resizeFX(){fx.width=innerWidth;fx.height=innerHeight;}resizeFX();addEventListener('resize',()=>{resizeFX();sizeView();stickers.forEach(s=>{if(!(s.def.warp&&s.tracked))refresh(s);});});
+function resizeFX(){fx.width=innerWidth;fx.height=innerHeight;}resizeFX();addEventListener('resize',()=>{resizeFX();sizeView();stickers.forEach(s=>refresh(s));});
 function burst(x,y){const cols=['#ffd24a','#ff2d78','#39ff9e','#36d6ff','#a23bff','#fff'];for(let i=0;i<90;i++){const a=Math.random()*Math.PI*2,sp=3+Math.random()*7;parts.push({x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp-3,r:Math.random()*360,vr:(Math.random()-.5)*20,s:5+Math.random()*7,c:cols[i%cols.length],life:1});}if(parts.length===90)loopFX();}
 function loopFX(){fxc.clearRect(0,0,fx.width,fx.height);parts.forEach(p=>{p.vy+=.25;p.x+=p.vx;p.y+=p.vy;p.r+=p.vr;p.life-=.018;fxc.save();fxc.globalAlpha=Math.max(0,p.life);fxc.translate(p.x,p.y);fxc.rotate(p.r*Math.PI/180);fxc.fillStyle=p.c;fxc.fillRect(-p.s/2,-p.s/2,p.s,p.s*1.4);fxc.restore();});parts=parts.filter(p=>p.life>0&&p.y<fx.height+40);if(parts.length)requestAnimationFrame(loopFX);else fxc.clearRect(0,0,fx.width,fx.height);}
 
@@ -665,18 +576,15 @@ async function shareItem(url){try{const blob=await(await fetch(url)).blob();cons
 function saveItem(url){try{const a=document.createElement('a');a.href=url;a.download='glambooth-'+Date.now()+'.png';document.body.appendChild(a);a.click();a.remove();toast('Saved 💾 (iPhone: long‑press image → Save)');}catch(e){toast('Long‑press the image to save');}}
 $('#shutter').onclick=singleSnap;$('#stripBtn').onclick=runStrip;
 
-/* ---------- help (filename + per-hair window + per-warp pin grid, auto-generated) ---------- */
+/* ---------- help (filename + per-hair window auto-generated) ---------- */
 function openHelp(){const grp={funny:'Funny',glam:'Glam',party:'Party',crazy:'Crazy'};
   let html='<h3>🖼️ Swap in your own art</h3><p>Create <code>assets/</code> next to <code>index.html</code>; drop transparent PNGs (subject centred, ~512px+, keep aspect). Filename = the name below, lowercased, symbols/spaces removed. It auto-replaces the vector everywhere on next load. Placeholders are black/blonde only — drop PNGs for photo-real.</p>';
   for(const c of ['funny','glam','party','crazy']){const items=PROPS.filter(p=>p.cat===c);if(!items.length)continue;html+='<div class="grp">'+grp[c]+'</div>';
-    items.forEach(p=>{const win=p.win?'<span class="win">face-window x '+p.win.x0+'–'+p.win.x1+', y '+p.win.y0+'–'+p.win.y1+'</span>':'';
-      let pins='';if(p.warp){pins='<span class="pins">warp pins (u,v): ';const rows=[];p.warp.g.forEach((r,j)=>{const cells=[];r.forEach((nm,i)=>{if(nm)cells.push(nm+'@'+p.warp.u[i].toFixed(2)+','+p.warp.v[j].toFixed(2));});if(cells.length)rows.push(rows.length?('&nbsp;&nbsp;| '+cells.join(', ')):cells.join(', '));});pins+=rows.join(' ')+'</span>';}
-      html+='<div class="row"><b>'+p.name+win+pins+'</b><span>'+fname(p.name)+'.png</span></div>';});}
-  html+='<h3>💇 Hair PNGs (placement)</h3><p>The face mesh has NO top-of-skull landmark, so the app builds the crown from YOUR art. For each hair slot, put the face inside its <b>face-window</b> (printed above): hairline at the TOP, chin at the BOTTOM, cheeks at the SIDES. Draw hair volume ABOVE the window (top of head) and length BELOW it (long vs bob); keep the sides off the jaw so it reads as hair, not a beard. Transparent elsewhere.</p>';
-  html+='<h3>🌀 Warp PNGs (beard & glasses)</h3><p>These bend with your head via a small control mesh. Draw your PNG so its features sit at the <b>warp pins</b> printed above (e.g. for a beard: mouth at the mouth pin, chin at the chin pin, jaw corners at jawL/jawR). The built-in vectors already match. Set <code>WARP = false</code> at the top of the script to make them rigid instead.</p>';
-  html+='<h3>➕ Add a sticker</h3><p>Push <code>P(\'category\',\'svg\'|\'emoji\',\'Name\', art, {cx,cy,size}[, win[, warp]])</code> into <code>PROPS</code>, then add <code>\'Name\'</code> to the matching tracking set. <code>win</code> = {x0,y0,x1,y1} for box-fit props; <code>warp</code> = {u,v,g} control-pin grid for warp props. New geometry? add a case in <code>fitTracked()</code>; new warp pin name? add it to <code>namedScreen()</code>.</p>';
-  html+='<h3>💄 Makeup colours</h3><p>In <code>drawMakeup()</code> search the tags LIP (lipstick), BLUSH, SHADOW, GLOW, LASH, BROWS. The Glam slider scales them all.</p>';
-  html+='<h3>🎛️ Toggles</h3><p>Top of script: <code>SHOW_MESH = true</code> draws the cyan wireframe (off by default). <code>WARP = false</code> disables mesh-warp.</p>';
+    items.forEach(p=>{const win=p.win?'<span class="win">face-window x '+p.win.x0+'–'+p.win.x1+', y '+p.win.y0+'–'+p.win.y1+'</span>':'';html+='<div class="row"><b>'+p.name+win+'</b><span>'+fname(p.name)+'.png</span></div>';});}
+  html+='<h3>💇 Hair PNGs (placement)</h3><p>The face mesh has NO top-of-skull landmark, so the app builds the crown from YOUR art. For each hair slot, put the face inside its <b>face-window</b> (printed above): hairline at the TOP of the window, chin at the BOTTOM, cheeks at the SIDES. Draw hair volume ABOVE the window (becomes the top of the head) and length BELOW it (long vs bob). Transparent elsewhere. The app maps that window onto the detected face, so it locks on like a real filter.</p>';
+  html+='<h3>➕ Add a sticker</h3><p>Push <code>P(\'category\',\'svg\'|\'emoji\',\'Name\', art, {cx,cy,size}[, win])</code> into <code>PROPS</code>, then add <code>\'Name\'</code> to the matching tracking set. <code>win</code> = {x0,y0,x1,y1} only for box-fit props (hair / full-face masks) = where the face sits in the image (0..1). New geometry? add a case in <code>fitTracked()</code>.</p>';
+  html+='<h3>💄 Makeup colours</h3><p>In <code>drawMakeup()</code>: <code>/*LIP*/</code> (lipstick), <code>/*BLUSH*/</code>, <code>/*SHADOW*/</code>, <code>/*GLOW*/</code>, <code>/*LASH*/</code>, <code>/*BROWS*/</code>. The Glam slider scales them all.</p>';
+  html+='<h3>🎛️ Toggles</h3><p>Top of script: <code>SHOW_MESH = true</code> draws the cyan wireframe (off by default so it never lands in photos).</p>';
   $('#helpBody').innerHTML=html;$('#help').classList.add('on');}
 $('#helpBtn').onclick=openHelp;$('#helpBack').onclick=()=>$('#help').classList.remove('on');
 
