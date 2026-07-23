@@ -1,4 +1,4 @@
-const CACHE = 'glambooth-v1';
+const CACHE = 'glambooth-v2';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icon.png'];
 
 self.addEventListener('install', e => {
